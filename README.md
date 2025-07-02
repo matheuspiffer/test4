@@ -1,5 +1,3 @@
-# 🧩 SOLUTION.md
-
 ## ✅ Overview
 
 This solution focuses on improving scalability, performance, and maintainability, both on the backend and frontend. Below are the key improvements and technical decisions made during implementation.
