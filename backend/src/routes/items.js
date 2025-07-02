@@ -1,25 +1,31 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const { invalidateStatsCache } = require("./stats");
 const router = express.Router();
-const DATA_PATH = path.join(__dirname, '../../../data/items.json');
+const DATA_PATH = path.join(__dirname, "../../../data/items.json");
 
-// Utility to read data (intentionally sync to highlight blocking issue)
-function readData() {
-  const raw = fs.readFileSync(DATA_PATH);
+async function readData() {
+  const raw = await fs.promises.readFile(DATA_PATH, "utf8");
   return JSON.parse(raw);
 }
 
+async function writeData(data) {
+  await fs.promises.writeFile(DATA_PATH, JSON.stringify(data, null, 2), "utf8");
+}
+
 // GET /api/items
-router.get('/', (req, res, next) => {
+router.get("/", async (req, res, next) => {
   try {
-    const data = readData();
+    const data = await readData();
     const { limit, q } = req.query;
+
     let results = data;
 
     if (q) {
-      // Simple substring search (sub‑optimal)
-      results = results.filter(item => item.name.toLowerCase().includes(q.toLowerCase()));
+      results = results.filter((item) =>
+        item.name.toLowerCase().includes(q.toLowerCase())
+      );
     }
 
     if (limit) {
@@ -33,12 +39,13 @@ router.get('/', (req, res, next) => {
 });
 
 // GET /api/items/:id
-router.get('/:id', (req, res, next) => {
+router.get("/:id", async (req, res, next) => {
   try {
-    const data = readData();
-    const item = data.find(i => i.id === parseInt(req.params.id));
+    console.log("get item", req.params.id);
+    const data = await readData();
+    const item = data.find((i) => i.id === parseInt(req.params.id));
     if (!item) {
-      const err = new Error('Item not found');
+      const err = new Error("Item not found");
       err.status = 404;
       throw err;
     }
@@ -49,15 +56,69 @@ router.get('/:id', (req, res, next) => {
 });
 
 // POST /api/items
-router.post('/', (req, res, next) => {
+router.post("/", async (req, res, next) => {
   try {
-    // TODO: Validate payload (intentional omission)
     const item = req.body;
-    const data = readData();
+    const data = await readData();
     item.id = Date.now();
     data.push(item);
-    fs.writeFileSync(DATA_PATH, JSON.stringify(data, null, 2));
+    await writeData(data);
+
+    await invalidateStatsCache();
+
     res.status(201).json(item);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/items/:id
+router.put("/:id", async (req, res, next) => {
+  try {
+    const itemId = parseInt(req.params.id);
+    const updatedData = req.body;
+    const data = await readData();
+    
+    const itemIndex = data.findIndex((i) => i.id === itemId);
+    if (itemIndex === -1) {
+      const err = new Error("Item not found");
+      err.status = 404;
+      throw err;
+    }
+
+    // Manter o ID original
+    const updatedItem = { ...updatedData, id: itemId };
+    data[itemIndex] = updatedItem;
+    
+    await writeData(data);
+    await invalidateStatsCache();
+
+    res.json(updatedItem);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/items/:id
+router.delete("/:id", async (req, res, next) => {
+  try {
+    const itemId = parseInt(req.params.id);
+    const data = await readData();
+    
+    const itemIndex = data.findIndex((i) => i.id === itemId);
+    if (itemIndex === -1) {
+      const err = new Error("Item not found");
+      err.status = 404;
+      throw err;
+    }
+
+    const deletedItem = data[itemIndex];
+    data.splice(itemIndex, 1);
+    
+    await writeData(data);
+    await invalidateStatsCache();
+
+    res.json(deletedItem);
   } catch (err) {
     next(err);
   }

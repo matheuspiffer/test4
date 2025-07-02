@@ -1,32 +1,48 @@
-import React, { useEffect } from 'react';
-import { useData } from '../state/DataContext';
-import { Link } from 'react-router-dom';
+import React, { useState } from "react";
+import { ItemsList, Stats, CreateItemModal } from "../components";
 
 function Items() {
-  const { items, fetchItems } = useData();
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  useEffect(() => {
-    let active = true;
+  const handleCreateItemClick = () => {
+    setShowCreateModal(true);
+  };
 
-    // Intentional bug: setState called after component unmount if request is slow
-    fetchItems().catch(console.error);
-
-    // Clean‑up to avoid memory leak (candidate should implement)
-    return () => {
-      active = false;
-    };
-  }, [fetchItems]);
-
-  if (!items.length) return <p>Loading...</p>;
+  const handleCloseModal = () => {
+    setShowCreateModal(false);
+  };
 
   return (
-    <ul>
-      {items.map(item => (
-        <li key={item.id}>
-          <Link to={'/items/' + item.id}>{item.name}</Link>
-        </li>
-      ))}
-    </ul>
+    <div className="items-page">
+      <section aria-labelledby="stats-heading">
+        <h1 id="stats-heading" className="sr-only">Statistics Overview</h1>
+        <Stats />
+      </section>
+      
+      <section aria-labelledby="items-heading">
+        <header className="items-header">
+          <h1 id="items-heading">Items List</h1>
+          <button 
+            className="primary-button create-item-button"
+            onClick={handleCreateItemClick}
+            aria-describedby="create-item-description"
+          >
+            + Create New Item
+          </button>
+          <div id="create-item-description" className="sr-only">
+            Opens a modal dialog to create a new item
+          </div>
+        </header>
+        
+        <ItemsList />
+      </section>
+      
+      <CreateItemModal 
+        isOpen={showCreateModal} 
+        onClose={handleCloseModal}
+        aria-label={showCreateModal ? "Create new item dialog" : undefined}
+      />
+    </div>
   );
 }
 

@@ -1,23 +1,42 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
+const express = require("express");
+const fs = require("fs/promises");
+const path = require("path");
+const { createCache } = require("cache-manager");
+const { mean } = require("../utils/stats");
+
 const router = express.Router();
-const DATA_PATH = path.join(__dirname, '../../data/items.json');
+const DATA_PATH = path.join(__dirname, "../../../data/items.json");
 
-// GET /api/stats
-router.get('/', (req, res, next) => {
-  fs.readFile(DATA_PATH, (err, raw) => {
-    if (err) return next(err);
+const cache = createCache({ ttl: 300000 }); // 5 minutos
+const KEY = "stats";
 
-    const items = JSON.parse(raw);
-    // Intentional heavy CPU calculation
-    const stats = {
-      total: items.length,
-      averagePrice: items.reduce((acc, cur) => acc + cur.price, 0) / items.length
-    };
+async function rebuildStats() {
+  const raw = await fs.readFile(DATA_PATH, "utf8");
+  const items = JSON.parse(raw);
 
-    res.json(stats);
-  });
+  const total = items.length;
+  const averagePrice = total ? mean(items.map((item) => item.price)) : 0;
+
+  const stats = { total, averagePrice };
+  await cache.set(KEY, stats);
+  return stats;
+}
+
+router.get("/", async (req, res, next) => {
+  try {
+    const cached = await cache.get(KEY); // undefined se não existir
+    if (cached) return res.json(cached);
+
+    res.json(await rebuildStats());
+  } catch (err) {
+    console.error(err);
+    next(err);
+  }
 });
 
-module.exports = router;
+// Função para invalidar o cache
+async function invalidateStatsCache() {
+  await cache.del(KEY);
+}
+
+module.exports = { router, invalidateStatsCache };
